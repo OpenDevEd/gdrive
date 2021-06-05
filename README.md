@@ -19,3 +19,7 @@ Note: This requires setting up of
 Please read the Google Drive API v3 docs to figure out how to do that.
 
 The script has links to the API docs in it.
+
+# See also
+
+https://github.com/odeke-em/drive
