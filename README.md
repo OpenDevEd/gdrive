@@ -1,8 +1,8 @@
-# gdrive
+# bgdrive
 A simple nodejs script for performing basic actions in google drive.
 
 ```
-node gdrive help
+node bgdrive help
 ```
 
 # installation
