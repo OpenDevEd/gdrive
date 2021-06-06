@@ -2,8 +2,8 @@
 
 const fs = require('fs');
 const readline = require('readline');
-const {google} = require('googleapis');
-const confdir = require('os').homedir() +  "/.config/Bgdrive/"
+const { google } = require('googleapis');
+const confdir = require('os').homedir() + "/.config/Bgdrive/"
 
 const TOKEN_PATH = confdir + 'token.json';
 
@@ -16,11 +16,11 @@ program
 
 program
   .command('download <source...>')
-  .option('-f, --format [format]', 'specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)','pdf')
+  .option('-f, --format [format]', 'specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)', 'pdf')
   .description('Download gdrive file(s) in the given format(s).')
   .action((source, options) => {
     source = cleanUp(source)
-    runFunction(exportFile, { sources: source, options: options} );
+    runFunction(exportFile, { sources: source, options: options });
   });
 
 /*
@@ -38,7 +38,7 @@ program
   .action((source, options) => {
     source = cleanUp(source)
     options.target = cleanUp(options.target)
-    runFunction(moveFiles, { sources: source, options: options} );
+    runFunction(moveFiles, { sources: source, options: options });
   });
 
 
@@ -49,7 +49,19 @@ program
   .action((source, options) => {
     source = cleanUp(source)
     options.target = cleanUp(options.target)
-    runFunction(createShortcuts, { sources: source, options: options} );
+    runFunction(createShortcuts, { sources: source, options: options });
+  });
+
+program
+  .command('copy <source...>')
+  .option('-t, --target [id]', 'specify the target folder')
+  .option('-p, --prefix [string]', 'prefix the name of the copied file with "string"')
+  .option('-n, --name [string]', 'Name the file "string" (only makes sense for one file to be copied)')
+  .description('Copy the gdrive file(s) and move to folder with id')
+  .action((source, options) => {
+    source = cleanUp(source)
+    options.target = cleanUp(options.target)
+    runFunction(copyFiles, { sources: source, options: options });
   });
 
 
@@ -60,16 +72,16 @@ if (options.debug) console.log(options);
 
 function cleanUp(value) {
   if (Array.isArray(value)) {
-    value = value.map( x => cleanUpOne(x) );
+    value = value.map(x => cleanUpOne(x));
   } else {
     value = cleanUpOne(value);
   };
-  console.log("cleanUp="+JSON.stringify(  value          ,null,2))  
+  console.log("cleanUp=" + JSON.stringify(value, null, 2))
   return value;
 }
 
 function cleanUpOne(value) {
-  return value.replace(/\/edit.*$/i,"").replace(/^.*\//,"");
+  return value.replace(/\?.*$/i, "").replace(/\/edit.*$/i, "").replace(/^.*\//, "");
 }
 
 function runFunction(callback, callbackparameters) {
@@ -88,95 +100,139 @@ function main(auth) {
 }
 */
 
+async function copyFiles(auth, parameters) {
+  files = parameters.sources
+  folderId = parameters.options.target
+  prefix = parameters.options.prefix
+  name = parameters.options.name
+  files.forEach(async (fileId) => {
+    copyFile(auth, fileId, folderId, prefix)
+  })
+}
+
+async function copyFile(auth, fileId, folderId, prefix, name) {
+  var drive = google.drive({ version: 'v3', auth: auth });
+  console.log('File Id: ' + fileId);
+  const title = await printDocTitle(auth, fileId);
+  console.log('Title: ' + title);
+  const options = {
+    fields: "id,name,parents", // properties sent back to you from the API
+    supportsAllDrives: true
+  };
+  const metadata = {
+    name: name,
+    // Team Drives files & folders can have only 1 parent
+    parents: [{ id: folderId }],
+    // other possible fields you can supply: 
+    // https://developers.google.com/drive/api/v2/reference/files/copy#request-body
+  };
+  const result = await drive.files.copy({
+    'fileId': fileId,
+    'fields': 'id,name,mimeType,parents',
+    'name': name,
+    parents: [folderId]
+  })
+  // console.log("TEMPORARY=" + JSON.stringify(result, null, 2))
+  data = result.data
+  moveOneFile(auth, data.id, folderId);
+  renameFile(auth, data.id, name);
+
+
+
+  //  moveOneFile(auth, shortcut.id, folderId);
+
+}
+
+
 async function exportFile(auth, parameters) {
   // console.log("TEMPORARY="+JSON.stringify(   parameters         ,null,2))   
-  var drive = google.drive({version: 'v3', auth: auth});
+  var drive = google.drive({ version: 'v3', auth: auth });
   fileIds = parameters.sources
   types = parameters.options.format.split(",");
-  fileIds.forEach( async (fileId) => {
-    types.forEach( async (type) => {
-      const title = await printDocTitle(auth,fileId);
+  fileIds.forEach(async (fileId) => {
+    types.forEach(async (type) => {
+      const title = await printDocTitle(auth, fileId);
       console.log(title);
       var filename = title + '.pdf';
-      var mimetype = 'application/pdf'; 
+      var mimetype = 'application/pdf';
       // https://developers.google.com/drive/api/v3/ref-export-formats
-      switch(type) {
-      case 'pdf':
-	filename = title + '.pdf';
-	mimetype = 'application/pdf';
-	break;
-      case 'html':
-	filename = title + '.html';
-	mimetype = 'text/html';
-	break;
-      case 'txt':
-	filename = title + '.txt';
-	mimetype = 'text/plain';
-	break;
-      case 'docx':
-      case 'doc':
-	filename = title + '.docx';
-	mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-	break;
-      case 'odt':
-	filename = title + '.odt';
-	mimetype = "application/vnd.oasis.opendocument.text";
-	break;
-      case 'xls':
-      case 'xlsx':
-	filename = title + '.xlsx';
-	mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-	break;
-      case 'ods':
-	filename = title + '.ods';
-	mimetype = "application/x-vnd.oasis.opendocument.spreadsheet";
-	break;
-      case 'csv':
-	filename = title + '.csv';
-	mimetype = "text/csv";
-	break;
-      case 'tsv':
-	filename = title + '.tsv';
-	mimetype = "text/tab-separated-values";
-	break;
-      case 'ppt':
-      case 'pptx':
-	filename = title + '.pptx';
-	mimetype = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-	break;
-      case 'odp':
-	filename = title + '.odp';
-	mimetype = "application/vnd.oasis.opendocument.presentation";
-	break;
-/*      case '':
-	filename = title + '.?';
-	mimetype = "";
-	break; */
-      default:
-	console.log(`Did not understand type=${type}`);
-	return null;
+      switch (type) {
+        case 'pdf':
+          filename = title + '.pdf';
+          mimetype = 'application/pdf';
+          break;
+        case 'html':
+          filename = title + '.html';
+          mimetype = 'text/html';
+          break;
+        case 'txt':
+          filename = title + '.txt';
+          mimetype = 'text/plain';
+          break;
+        case 'docx':
+        case 'doc':
+          filename = title + '.docx';
+          mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          break;
+        case 'odt':
+          filename = title + '.odt';
+          mimetype = "application/vnd.oasis.opendocument.text";
+          break;
+        case 'xls':
+        case 'xlsx':
+          filename = title + '.xlsx';
+          mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          break;
+        case 'ods':
+          filename = title + '.ods';
+          mimetype = "application/x-vnd.oasis.opendocument.spreadsheet";
+          break;
+        case 'csv':
+          filename = title + '.csv';
+          mimetype = "text/csv";
+          break;
+        case 'tsv':
+          filename = title + '.tsv';
+          mimetype = "text/tab-separated-values";
+          break;
+        case 'ppt':
+        case 'pptx':
+          filename = title + '.pptx';
+          mimetype = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+          break;
+        case 'odp':
+          filename = title + '.odp';
+          mimetype = "application/vnd.oasis.opendocument.presentation";
+          break;
+        /*      case '':
+          filename = title + '.?';
+          mimetype = "";
+          break; */
+        default:
+          console.log(`Did not understand type=${type}`);
+          return null;
       }
-      
+
       var dest = fs.createWriteStream(filename);
-      
+
       const { data } = await drive.files.export(
-	{
-	  fileId: fileId,
-	  mimeType: mimetype,
-	},
-	{
-	  responseType: 'stream',
-	}
+        {
+          fileId: fileId,
+          mimeType: mimetype,
+        },
+        {
+          responseType: 'stream',
+        }
       );
-      
+
       data
-	.on('end', function () {
-	  console.log('Done');
-	})
-	.on('error', function (err) {
-	  console.log('Error during download', err);
-	})
-	.pipe(dest);
+        .on('end', function () {
+          console.log('Done');
+        })
+        .on('error', function (err) {
+          console.log('Error during download', err);
+        })
+        .pipe(dest);
     });
   });
 };
@@ -192,9 +248,9 @@ async function createShortcuts(auth, parameters) {
 // https://developers.google.com/drive/api/v3/reference/files/create
 // https://developers.google.com/drive/api/v3/shortcuts
 async function createShortcut(auth, fileId, folderId) {
-  var drive = google.drive({version: 'v3', auth: auth});
+  var drive = google.drive({ version: 'v3', auth: auth });
   console.log('File Id: ' + fileId);
-  const title = await printDocTitle(auth,fileId);
+  const title = await printDocTitle(auth, fileId);
   console.log('Title: ' + title);
   shortcutMetadata = {
     'name': title + " [shortcut]",
@@ -206,27 +262,27 @@ async function createShortcut(auth, fileId, folderId) {
   drive.files.create({
     'resource': shortcutMetadata,
     'fields': 'id,name,mimeType,shortcutDetails,parents',
-     // parents:  [folderId] , // <-- doesn't work...
-  }, function(err, resp) {
+    // parents:  [folderId] , // <-- doesn't work...
+  }, function (err, resp) {
     if (err) {
       // Handle error
       console.error(err);
     } else {
       shortcut = resp.data
       // console.log("TEMPORARY="+JSON.stringify(  shortcut          ,null,2))
-       /*
-      console.log('Shortcut Id: ' + shortcut.id +
-                  ', Name: ' + shortcut.name +
-                  ', target Id: ' + shortcut.shortcutDetails.targetId +
-                  ', target MIME type: ' + shortcut.shortcutDetails.targetMimeType);
-       */
+      /*
+     console.log('Shortcut Id: ' + shortcut.id +
+                 ', Name: ' + shortcut.name +
+                 ', target Id: ' + shortcut.shortcutDetails.targetId +
+                 ', target MIME type: ' + shortcut.shortcutDetails.targetMimeType);
+      */
       moveOneFile(auth, shortcut.id, folderId);
     }
 
   });
 }
 
-async function moveFiles(auth, parameters ) {
+async function moveFiles(auth, parameters) {
   // runFunction(moveFiles, { sources: source, options: options} );
   files = parameters.sources
   folderId = parameters.options.target
@@ -239,7 +295,7 @@ async function moveFiles(auth, parameters ) {
 async function moveOneFile(auth, fileId, folderId, makeShortcut) {
   // https://developers.google.com/drive/api/v3/reference/files/get
   // Retrieve the existing parents to remove
-  var drive = google.drive({version: 'v3', auth: auth});  
+  var drive = google.drive({ version: 'v3', auth: auth });
   drive.files.get({
     fileId: fileId,
     fields: 'parents',
@@ -255,34 +311,33 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
       // Move the file to the new folder
       var previousParents = file.parents.join(',');
       if (makeShortcut) {
-	// console.log("TEMPORARY="+JSON.stringify(   file.parents         ,null,2))	 
-	createShortcut(auth, fileId, file.parents[0]);
+        // console.log("TEMPORARY="+JSON.stringify(   file.parents         ,null,2))	 
+        createShortcut(auth, fileId, file.parents[0]);
       }
       drive.files.update({
-	fileId: fileId,
-	addParents: folderId,
-	removeParents: previousParents,
-	fields: 'id, parents',
-	supportsAllDrives: true
+        fileId: fileId,
+        addParents: folderId,
+        removeParents: previousParents,
+        fields: 'id, parents',
+        supportsAllDrives: true
       }, function (err, resp) {
-	if (err) {
-	  console.log("ERROR: "+JSON.stringify(    err        ,null,2))	   
-	  console.log("ERROR MOVING^^^");
-	} else {
-	  //console.log("Success: "+JSON.stringify(    resp        ,null,2))
-	  console.log("Moved successfully.");
-	}
+        if (err) {
+          console.log("ERROR: " + JSON.stringify(err, null, 2))
+          console.log("ERROR MOVING^^^");
+        } else {
+          //console.log("Success: "+JSON.stringify(    resp        ,null,2))
+          console.log("Moved successfully.");
+        }
       });
     }
   });
-
 }
-  
 
-function createFolder(auth) {
-  var drive = google.drive({version: 'v3', auth: auth});
+
+function createFolder(auth, name) {
+  var drive = google.drive({ version: 'v3', auth: auth });
   var fileMetadata = {
-    'name': 'Invoices',
+    'name': name,
     'mimeType': 'application/vnd.google-apps.folder'
   };
   drive.files.create({
@@ -294,7 +349,7 @@ function createFolder(auth) {
       console.error(err);
     } else {
       //      console.log('Folder Id: ', JSON.stringify(file            ,null,2) );
-      console.log('Folder Id: ', JSON.stringify(file.data.id            ,null,2) );
+      console.log('Folder Id: ', JSON.stringify(file.data.id, null, 2));
     }
   });
 
@@ -306,7 +361,7 @@ function createFolder(auth) {
  * @param {google.auth.OAuth2} auth The authenticated Google OAuth 2.0 client.
  */
 async function printDocTitle(auth, id) {
-  const docs = google.docs({version: 'v1', auth});
+  const docs = google.docs({ version: 'v1', auth });
   try {
     const res = await docs.documents.get({
       documentId: id
@@ -318,9 +373,29 @@ async function printDocTitle(auth, id) {
     console.log(`The title of the document is: ${res.data.title}`);
     return res.data.title;
   } catch (e) {
-    console.log("TEMPORARY="+JSON.stringify(  e          ,null,2))
+    console.log("TEMPORARY=" + JSON.stringify(e, null, 2))
     return "Title_not_avaiable";
   }
+}
+
+async function renameFile(auth, fileId, name) {
+  // https://developers.google.com/drive/api/v3/reference/files/get
+  // Retrieve the existing parents to remove
+  var drive = google.drive({ version: 'v3', auth: auth });
+  const resource = {'name': name};
+  drive.files.update({
+    fileId: fileId,
+    resource: resource,
+    supportsAllDrives: true
+  }, function (err, resp) {
+    if (err) {
+      console.log("ERROR: " + JSON.stringify(err, null, 2))
+      console.log("ERROR RENAMING^^^");
+    } else {
+      console.log("Success: "+JSON.stringify(    resp.data        ,null,2))
+      console.log("Renamed successfully.");
+    }
+  });
 }
 
 
@@ -344,7 +419,7 @@ v * limitations under the License.
 // [START docs_quickstart]
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/documents.readonly',
-	       'https://www.googleapis.com/auth/drive'];
+  'https://www.googleapis.com/auth/drive'];
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
@@ -356,9 +431,9 @@ const SCOPES = ['https://www.googleapis.com/auth/documents.readonly',
  * @param {function} callback The callback to call with the authorized client.
  */
 function authorize(credentials, callback, parameters) {
-  const {client_secret, client_id, redirect_uris} = credentials.installed;
+  const { client_secret, client_id, redirect_uris } = credentials.installed;
   const oAuth2Client = new google.auth.OAuth2(
-      client_id, client_secret, redirect_uris[0]);
+    client_id, client_secret, redirect_uris[0]);
 
   // Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
