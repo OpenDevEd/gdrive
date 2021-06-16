@@ -53,6 +53,15 @@ program
   });
 
 program
+  .command('wormhole <source...>')
+  .description('Create shortcuts for gdrive folders in the folders')
+  .action((source, options) => {
+    source = cleanUp(source)
+    options = {}
+    runFunction(createWormhole, { sources: source, options: options });
+  });
+
+program
   .command('copy <source...>')
   .option('-t, --target [id]', 'specify the target folder')
   .option('-p, --prefix [string]', 'prefix the name of the copied file with "string"')
@@ -113,7 +122,7 @@ async function copyFiles(auth, parameters) {
 async function copyFile(auth, fileId, folderId, prefix, name) {
   var drive = google.drive({ version: 'v3', auth: auth });
   console.log('File Id: ' + fileId);
-  const title = await printDocTitle(auth, fileId);
+  const title = await getName(auth, fileId);
   console.log('Title: ' + title);
   const options = {
     fields: "id,name,parents", // properties sent back to you from the API
@@ -151,7 +160,7 @@ async function exportFile(auth, parameters) {
   types = parameters.options.format.split(",");
   fileIds.forEach(async (fileId) => {
     types.forEach(async (type) => {
-      const title = await printDocTitle(auth, fileId);
+      const title = await getName(auth, fileId);
       console.log(title);
       var filename = title + '.pdf';
       var mimetype = 'application/pdf';
@@ -237,6 +246,14 @@ async function exportFile(auth, parameters) {
   });
 };
 
+async function createWormhole(auth, parameters) {
+  files = parameters.sources
+  //console.log("TEMPORARY="+JSON.stringify(   parameters   ,null,2))
+  //process.exit(1)
+  createShortcut(auth, files[0], files[1])
+  createShortcut(auth, files[1], files[0])
+}
+
 async function createShortcuts(auth, parameters) {
   files = parameters.sources
   folderId = parameters.options.target
@@ -249,8 +266,8 @@ async function createShortcuts(auth, parameters) {
 // https://developers.google.com/drive/api/v3/shortcuts
 async function createShortcut(auth, fileId, folderId) {
   var drive = google.drive({ version: 'v3', auth: auth });
-  console.log('File Id: ' + fileId);
-  const title = await printDocTitle(auth, fileId);
+  const title = await getName(auth, fileId);  
+  // console.log('File Id: ' + fileId);
   console.log('Title: ' + title);
   shortcutMetadata = {
     'name': title + " [shortcut]",
@@ -277,6 +294,7 @@ async function createShortcut(auth, fileId, folderId) {
                  ', target MIME type: ' + shortcut.shortcutDetails.targetMimeType);
       */
       moveOneFile(auth, shortcut.id, folderId);
+//      renameFile(auth, shortcut.id,  title + " [shortcut]");
     }
 
   });
@@ -354,6 +372,23 @@ function createFolder(auth, name) {
   });
 
 }
+
+async function getName(auth, id) {
+  var drive = google.drive({ version: 'v3', auth: auth });
+  try {
+    //console.log("in");
+    const res = await drive.files.get({
+      fileId: id,
+      supportsAllDrives: true
+    });
+    // console.log("TEMPORARY="+JSON.stringify(    res        ,null,2))
+    return res.data.name
+  } catch (err) {
+    console.log("ERROR=" + JSON.stringify(err, null, 2))
+    return "Title_not_avaiable";    
+  };
+}
+
 
 /**
  * Prints the title of a sample doc:
