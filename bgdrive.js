@@ -74,6 +74,17 @@ program
   });
 
 
+program
+  .command('newfolder <name...>')
+  .option('-t, --target [id]', 'specify the target folder')
+  .description('Create folders on gdrive.')
+  .action((name, options) => {
+    options.target = cleanUp(options.target)
+    runFunction(createFolders, { names: name, options: options });
+  });
+
+
+
 program.parse(process.argv);
 const options = program.opts();
 if (options.debug) console.log(options);
@@ -351,26 +362,37 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
   });
 }
 
+async function createFolders(auth, parameters) {
+  names = parameters.names
+  folderId = parameters.options.target
+  const makeShortCut = parameters.options.shortcut
+  names.forEach(async (name) => {
+    createFolder(auth, name, folderId)
+  })
+}
 
-function createFolder(auth, name) {
+async function createFolder(auth, name, folderId) {
   var drive = google.drive({ version: 'v3', auth: auth });
   var fileMetadata = {
     'name': name,
-    'mimeType': 'application/vnd.google-apps.folder'
+    'mimeType': 'application/vnd.google-apps.folder',
+    'parents': [folderId],
+    supportsAllDrives: true
   };
   drive.files.create({
     resource: fileMetadata,
     fields: 'id'
-  }, function (err, file) {
+  }, function (err, response) {
     if (err) {
       // Handle error
       console.error(err);
-    } else {
-      //      console.log('Folder Id: ', JSON.stringify(file            ,null,2) );
-      console.log('Folder Id: ', JSON.stringify(file.data.id, null, 2));
+      return null
     }
-  });
-
+    // console.log('Folder Id: ', JSON.stringify(response  ,null,2) );
+    console.log('Succes, Folder Id: ', JSON.stringify(response.data.id, null, 2));
+    fileId = response.data.id
+    return fileId
+  });  
 }
 
 async function getName(auth, id) {
