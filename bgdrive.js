@@ -54,10 +54,11 @@ program
 
 program
   .command('wormhole <source...>')
+  .option('-w, --oldnew', 'prefix [old] and [new]')
+  .option('-m, --migrate', 'prefix [old_Shared_Folder] and [new_Shared_Drive]')
   .description('Create shortcuts for gdrive folders in the folders')
   .action((source, options) => {
     source = cleanUp(source)
-    options = {}
     runFunction(createWormhole, { sources: source, options: options });
   });
 
@@ -261,27 +262,40 @@ async function createWormhole(auth, parameters) {
   files = parameters.sources
   //console.log("TEMPORARY="+JSON.stringify(   parameters   ,null,2))
   //process.exit(1)
-  createShortcut(auth, files[0], files[1])
-  createShortcut(auth, files[1], files[0])
+  var p1 = "";
+  var p2 = "";
+  if (parameters.options.oldnew) {
+    p1 = "[OBSOLETE_FOLDER] "
+    p2 = "[NEW_FOLDER] "
+  }
+  if (parameters.options.migrate) {
+    p1 = "[OBSOLETE_SHARED_FOLDER] "
+    p2 = "[NEW_FOLDER_IN_SHARED_DRIVE] "
+  }
+  createShortcut(auth, files[0], files[1], p1)
+  createShortcut(auth, files[1], files[0], p2)
 }
 
 async function createShortcuts(auth, parameters) {
   files = parameters.sources
   folderId = parameters.options.target
   files.forEach(async (fileId) => {
-    createShortcut(auth, fileId, folderId)
+    createShortcut(auth, fileId, folderId, "")
   })
 }
 
 // https://developers.google.com/drive/api/v3/reference/files/create
 // https://developers.google.com/drive/api/v3/shortcuts
-async function createShortcut(auth, fileId, folderId) {
+async function createShortcut(auth, fileId, folderId, prefix) {
   var drive = google.drive({ version: 'v3', auth: auth });
-  const title = await getName(auth, fileId);  
+  const title = await getName(auth, fileId);
+  if (!prefix) {
+    prefix = ""
+  }
   // console.log('File Id: ' + fileId);
   console.log('Title: ' + title);
   shortcutMetadata = {
-    'name': title + " [shortcut]",
+    'name': prefix + title + " [shortcut]",
     'mimeType': 'application/vnd.google-apps.shortcut',
     'shortcutDetails': {
       'targetId': fileId
