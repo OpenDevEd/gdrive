@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const path = require('path');
 
 const fs = require('fs');
 const readline = require('readline');
@@ -75,13 +76,23 @@ program
   });
 
 
-program
+  program
   .command('newfolder <name...>')
   .option('-t, --target [id]', 'specify the target folder')
   .description('Create folders on gdrive.')
   .action((name, options) => {
     options.target = cleanUp(options.target)
     runFunction(createFolders, { names: name, options: options });
+  });
+
+
+  program
+  .command('upload <path...>')
+  .option('-t, --target [id]', 'specify the target folder')
+  .description('Upload Files on gdrive.')
+  .action((path, options) => {
+    options.target = cleanUp(options.target)
+    runFunction(uploadFiles, { names: path, options: options });
   });
 
 
@@ -103,7 +114,6 @@ function cleanUp(value) {
   } else {
     value = cleanUpOne(value);
   };
-  console.log("cleanUp=" + JSON.stringify(value, null, 2))
   return value;
 }
 
@@ -330,6 +340,48 @@ async function createFolders(auth, parameters) {
     createFolder(auth, name, folderId)
   })
 }
+
+async function uploadFiles(auth, params) {
+  const folderId = params.options.target;
+  for (const file of params.names) {
+    const id = await uploadFile(auth, file,folderId);
+  }
+}
+
+
+async function uploadFile(auth,file, folderId) {
+  const fileName = path.basename(file);
+  const isDirectory = fs.statSync(file).isDirectory();
+  if (isDirectory) {
+    console.log(`Skipping directory: ${fileName}`);
+    return;
+  }
+
+  const drive = google.drive({ version: 'v3', auth });
+
+  const requestBody = {
+    name: fileName,
+    parents: [folderId],
+    fields: 'id',
+  };
+  const media = {
+    body: fs.createReadStream(file),
+  };
+
+  try {
+    const uploadedFile = await drive.files.create({
+      requestBody,
+      media,
+    });
+
+    console.log('File Id:', uploadedFile.data.id);
+    return uploadedFile.data.id;
+  } catch (err) {
+    // TODO: Handle error
+    console.log(err);
+  }
+}
+
 
 async function createFolder(auth, name, folderId) {
   var drive = google.drive({ version: 'v3', auth: auth });
