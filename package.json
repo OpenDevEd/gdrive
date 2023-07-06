@@ -1,0 +1,24 @@
+{
+  "name": "bgdrive",
+  "version": "1.0.0",
+  "description": "A simple nodejs script for performing basic actions in google drive.",
+  "main": "bgdrive.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenDevEd/bgdrive.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/OpenDevEd/bgdrive/issues"
+  },
+  "homepage": "https://github.com/OpenDevEd/bgdrive#readme",
+  "dependencies": {
+    "commander": "^11.0.0",
+    "googleapis": "^39.2.0"
+  }
+}

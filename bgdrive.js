@@ -383,6 +383,7 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
 }
 
 async function createFolders(auth, parameters) {
+  if(!parameters) process.exit(1)
   names = parameters.names
   folderId = parameters.options.target
   const makeShortCut = parameters.options.shortcut
@@ -514,7 +515,7 @@ function authorize(credentials, callback, parameters) {
 
   // Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
-    if (err) return getNewToken(oAuth2Client, callback);
+    if (err) return getNewToken(oAuth2Client, callback, parameters);
     oAuth2Client.setCredentials(JSON.parse(token));
     callback(oAuth2Client, parameters);
   });
@@ -526,7 +527,7 @@ function authorize(credentials, callback, parameters) {
  * @param {google.auth.OAuth2} oAuth2Client The OAuth2 client to get token for.
  * @param {getEventsCallback} callback The callback for the authorized client.
  */
-function getNewToken(oAuth2Client, callback) {
+function getNewToken(oAuth2Client, callback, parameters) {
   const authUrl = oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
@@ -545,7 +546,7 @@ function getNewToken(oAuth2Client, callback) {
       fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
         if (err) console.error(err);
         console.log('Token stored to', TOKEN_PATH);
-        callback(oAuth2Client);
+        callback(oAuth2Client, parameters);
       });
     });
   });
