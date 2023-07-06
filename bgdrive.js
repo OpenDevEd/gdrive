@@ -92,6 +92,12 @@ if (options.debug) console.log(options);
 
 
 function cleanUp(value) {
+  if(value===undefined)
+  {
+    // console.log("no need to clean ")
+    return;
+
+  }
   if (Array.isArray(value)) {
     value = value.map(x => cleanUpOne(x));
   } else {
@@ -168,8 +174,8 @@ async function copyFile(auth, fileId, folderId, prefix, name) {
 async function exportFile(auth, parameters) {
   // console.log("TEMPORARY="+JSON.stringify(   parameters         ,null,2))   
   var drive = google.drive({ version: 'v3', auth: auth });
-  fileIds = parameters.sources
-  types = parameters.options.format.split(",");
+  fileIds = parameters?.sources
+  types = parameters?.options.format.split(",");
   fileIds.forEach(async (fileId) => {
     types.forEach(async (type) => {
       const title = await getName(auth, fileId);
@@ -179,7 +185,7 @@ async function exportFile(auth, parameters) {
       // https://developers.google.com/drive/api/v3/ref-export-formats
       switch (type) {
         case 'pdf':
-          filename = title + '.pdf';
+          filename = title ;
           mimetype = 'application/pdf';
           break;
         case 'html':
@@ -539,8 +545,8 @@ function getNewToken(oAuth2Client, callback) {
       fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
         if (err) console.error(err);
         console.log('Token stored to', TOKEN_PATH);
+        callback(oAuth2Client);
       });
-      callback(oAuth2Client);
     });
   });
 }
