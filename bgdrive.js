@@ -177,90 +177,29 @@ async function exportFile(auth, parameters) {
   fileIds = parameters?.sources
   types = parameters?.options.format.split(",");
   fileIds.forEach(async (fileId) => {
-    types.forEach(async (type) => {
-      const title = await getName(auth, fileId);
-      console.log(title);
-      var filename = title + '.pdf';
-      var mimetype = 'application/pdf';
-      // https://developers.google.com/drive/api/v3/ref-export-formats
-      switch (type) {
-        case 'pdf':
-          filename = title ;
-          mimetype = 'application/pdf';
-          break;
-        case 'html':
-          filename = title + '.html';
-          mimetype = 'text/html';
-          break;
-        case 'txt':
-          filename = title + '.txt';
-          mimetype = 'text/plain';
-          break;
-        case 'docx':
-        case 'doc':
-          filename = title + '.docx';
-          mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-          break;
-        case 'odt':
-          filename = title + '.odt';
-          mimetype = "application/vnd.oasis.opendocument.text";
-          break;
-        case 'xls':
-        case 'xlsx':
-          filename = title + '.xlsx';
-          mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-          break;
-        case 'ods':
-          filename = title + '.ods';
-          mimetype = "application/x-vnd.oasis.opendocument.spreadsheet";
-          break;
-        case 'csv':
-          filename = title + '.csv';
-          mimetype = "text/csv";
-          break;
-        case 'tsv':
-          filename = title + '.tsv';
-          mimetype = "text/tab-separated-values";
-          break;
-        case 'ppt':
-        case 'pptx':
-          filename = title + '.pptx';
-          mimetype = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-          break;
-        case 'odp':
-          filename = title + '.odp';
-          mimetype = "application/vnd.oasis.opendocument.presentation";
-          break;
-        /*      case '':
-          filename = title + '.?';
-          mimetype = "";
-          break; */
-        default:
-          console.log(`Did not understand type=${type}`);
-          return null;
-      }
-
-      var dest = fs.createWriteStream(filename);
-
-      const { data } = await drive.files.export(
-        {
-          fileId: fileId,
-          mimeType: mimetype,
-        },
-        {
-          responseType: 'stream',
-        }
-      );
-
-      data
-        .on('end', function () {
-          console.log('Done');
-        })
-        .on('error', function (err) {
-          console.log('Error during download', err);
-        })
-        .pipe(dest);
+    const {data} = await drive.files.get({
+      fileId,
+      fields: 'name',
     });
+    const name = data.name;
+    const response = await drive.files.get({
+  fileId,
+  alt: 'media',
+}, { responseType: 'stream' });
+
+// Create a write stream to save the file content
+const dest = fs.createWriteStream(name);
+
+// Pipe the file content to the write stream
+response.data.pipe(dest);
+
+// Wait for the download to complete
+await new Promise((resolve, reject) => {
+  dest.on('finish', resolve);
+  dest.on('error', reject);
+});
+
+console.log(`File "${name}" downloaded successfully! `);
   });
 };
 
@@ -420,6 +359,14 @@ async function getName(auth, id) {
   var drive = google.drive({ version: 'v3', auth: auth });
   try {
     //console.log("in");
+    const permissions = await drive.permissions.list({
+      fileId: id,
+      supportsAllDrives: true
+
+    });
+    
+    // The `permissions` object will contain an array of all the permissions for the file
+    console.log(permissions.data);
     const res = await drive.files.get({
       fileId: id,
       supportsAllDrives: true
