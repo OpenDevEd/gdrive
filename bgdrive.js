@@ -308,6 +308,9 @@ async function moveFiles(auth, parameters) {
   files = parameters.sources;
   folderId = parameters.options.target;
   const makeShortCut = parameters.options.shortcut;
+  console.log('files: ' + files);
+  console.log('folderId: ' + folderId);
+  console.log('makeShortCut: ' + makeShortCut);
   files.forEach(async (fileId) => {
     moveOneFile(auth, fileId, folderId, makeShortCut);
   });
@@ -347,6 +350,7 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
           },
           function (err, resp) {
             if (err) {
+              console.log("oppssss")
               console.log("ERROR: " + JSON.stringify(err, null, 2));
               console.log("ERROR MOVING^^^");
             } else {
@@ -465,7 +469,7 @@ async function collectElements(auth, params) {
   const files = [];
   const data = [];
   let pageToken = null;
-  console.log("q: ", query);
+  // console.log("q: ", query);
   do {
     try {
       const res = await drive.files.list({
