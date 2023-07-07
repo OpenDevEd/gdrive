@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 const path = require("path");
-const { printTable } = require("console-table-printer");
 
 const fs = require("fs");
 const readline = require("readline");
