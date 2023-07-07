@@ -110,9 +110,8 @@ program
   .option("-f, --folderOnly", "Retrieve only folders")
   .option("-i, --fileOnly", "Retrieve only files")
   .option(
-    "-s, --format <format...>",
+    "-t, --format <format...>",
     "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
-    "pdf"
   )
   .option("-n, --name [string]", "Specify a string to search for in file names")
   .description("Retrieve files from Google Drive")
@@ -205,7 +204,7 @@ async function exportFile(auth, parameters) {
   // console.log("TEMPORARY="+JSON.stringify(   parameters         ,null,2))
   var drive = google.drive({ version: "v3", auth: auth });
   fileIds = parameters?.sources;
-  types = parameters?.options.format.split(",");
+  // types = parameters.options.format.split(",");
   fileIds.forEach(async (fileId) => {
     const { data } = await drive.files.get({
       fileId,
@@ -380,86 +379,83 @@ async function uploadFiles(auth, params) {
 }
 function getMimetype(file) {
   switch (file) {
-    case 'pdf':
-      return 'application/pdf';
-    case 'html':
-    case 'htm':
-      return 'text/html';
-    case 'txt':
-      return 'text/plain';
-    case 'docx':
-    case 'doc':
-      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    case 'odt':
-      return 'application/vnd.oasis.opendocument.text';
-    case 'xls':
-    case 'xlsx':
-    case 'ods':
-      return 'application/vnd.ms-excel';
-    case 'xml':
-      return 'text/xml';
-    case 'csv':
-      return 'text/plain';
-    case 'tmpl':
-      return 'text/plain';
-    case 'php':
-      return 'application/x-httpd-php';
-    case 'jpg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    case 'gif':
-      return 'image/gif';
-    case 'bmp':
-      return 'image/bmp';
-    case 'doc':
-      return 'application/msword';
-    case 'js':
-      return 'text/js';
-    case 'swf':
-      return 'application/x-shockwave-flash';
-    case 'mp3':
-      return 'audio/mpeg';
-    case 'zip':
-      return 'application/zip';
-    case 'rar':
-      return 'application/rar';
-    case 'tar':
-      return 'application/tar';
-    case 'arj':
-      return 'application/arj';
-    case 'cab':
-      return 'application/cab';
+    case "pdf":
+      return "application/pdf";
+    case "html":
+    case "htm":
+      return "text/html";
+    case "txt":
+      return "text/plain";
+    case "docx":
+    case "doc":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "odt":
+      return "application/vnd.oasis.opendocument.text";
+    case "xls":
+    case "xlsx":
+    case "ods":
+      return "application/vnd.ms-excel";
+    case "xml":
+      return "text/xml";
+    case "csv":
+      return "text/plain";
+    case "tmpl":
+      return "text/plain";
+    case "php":
+      return "application/x-httpd-php";
+    case "jpg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "gif":
+      return "image/gif";
+    case "bmp":
+      return "image/bmp";
+    case "doc":
+      return "application/msword";
+    case "js":
+      return "text/js";
+    case "swf":
+      return "application/x-shockwave-flash";
+    case "mp3":
+      return "audio/mpeg";
+    case "zip":
+      return "application/zip";
+    case "rar":
+      return "application/rar";
+    case "tar":
+      return "application/tar";
+    case "arj":
+      return "application/arj";
+    case "cab":
+      return "application/cab";
     default:
       console.log(`Did not understand type=${file}`);
       return null;
   }
 }
 
-
 async function collectElements(auth, params) {
   let query = "";
-  // console.log("params: ", params.options.format);
-  let mimetypes = [];
-  params.options.format.forEach(async (type) => {
-    const mimetype = getMimetype(type);
-    if (!mimetype) return;
-    mimetypes.push(mimetype);
-    // query = query + "mimeType='" + mimetype + "' or ";
-  });
-  // query = query.slice(0, -4);
-  // query = query + ") and ";
-  // console.log("q: ", query);
-  if (mimetypes.length != 0) {
-  query = "( ";
 
-    for (const mimetype of mimetypes) {
-      query = query + "mimeType='" + mimetype + "' or ";
+  if (params.options.format) {
+    console.log("FORMAT=" + params.options.format);
+    let mimetypes = [];
+    params.options.format.forEach(async (type) => {
+      const mimetype = getMimetype(type);
+      if (!mimetype) return;
+      mimetypes.push(mimetype);
+    });
+    if (mimetypes.length != 0) {
+      query = "( ";
+      for (const mimetype of mimetypes) {
+        query = query + "mimeType='" + mimetype + "' or ";
+      }
+      query = query.slice(0, -4);
+      query = query + ") and ";
     }
-    query = query.slice(0, -4);
-    query = query + ") and ";
   }
-  
+
   if (params.options.fileOnly && !params.options.folderOnly)
     query = query + "mimeType!='application/vnd.google-apps.folder' and ";
   else if (!params.options.fileOnly && params.options.folderOnly)
@@ -486,8 +482,7 @@ async function collectElements(auth, params) {
         const fileExtension = file.name.slice(file.name.lastIndexOf("."));
         let shortenedString = "";
         if (fileExtension.length < 6 && file.name.length > 33)
-          shortenedString =
-            '"' + file.name.slice(0, 30) + '..."' + fileExtension;
+          shortenedString =  file.name.slice(0, 30) + '...' + fileExtension;
         else if (file.name.length > 33)
           shortenedString = file.name.slice(0, 33) + "...";
         else shortenedString = file.name;
