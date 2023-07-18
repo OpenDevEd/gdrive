@@ -1,11 +1,11 @@
-# bgdrive
+# Bgdrive
 A simple nodejs script for performing basic actions in google drive.
 
 ```
 node bgdrive help
 ```
 
-# installation
+# Installation
 
 ```
 npm install googleapis@39 --save
@@ -16,7 +16,7 @@ Note: This requires setting up of
 ```
 ~/.config/Bgdrive/credentials.json
 ```
-Please read the Google Drive API v3 docs to figure out how to do that.
+Please read the Google Drive API v3 docs to figure out how to do that. You can find detailed instructions in the [Google Drive API with Python Part I: Set Up Credentials](https://medium.com/swlh/google-drive-api-with-python-part-i-set-up-credentials-1f729cb0372b) article.
 
 The script has links to the API docs in it.
 # Options
