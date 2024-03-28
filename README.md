@@ -2,14 +2,18 @@
 A simple nodejs script for performing basic actions in google drive.
 
 ```
-node bgdrive help
+bgdrive --help
 ```
 
 # Installation
 
 ```
+git clone
+cd bgdrive
 npm install googleapis@39 --save
 npm install commander
+npm link
+bgdrive --help
 ```
 
 Note: This requires setting up of
