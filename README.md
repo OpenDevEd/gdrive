@@ -8,7 +8,7 @@ bgdrive --help
 # Installation
 
 ```
-git clone
+git clone git@github.com:OpenDevEd/bgdrive.git
 cd bgdrive
 npm install googleapis@39 --save
 npm install commander
