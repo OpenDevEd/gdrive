@@ -66,6 +66,12 @@ You'll see a screen with your client ID and client secret. Click on the download
 
 And that's it! You now have your Google Credentials for Google Drive API.
 
+#### Step 8: Sign in
+
+When you first run `bgdrive`, you'll need to log in. `bgdrive` presents you with a link, which you open. Once you have signed in, you'll get a redirect to 'localhost' (which won't work). However, you can read off the code from that url. Paste that code into the terminal as prompted.
+
+You're now ready to use `bgdrive`!
+
 
 # Options
 
