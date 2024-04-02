@@ -8,7 +8,7 @@ bgdrive --help
 # Installation
 
 ```
-git clone git@github.com:OpenDevEd/bgdrive.git
+git clone https://github.com/OpenDevEd/bgdrive.git
 cd bgdrive
 npm run setup
 bgdrive --help
