@@ -4,10 +4,10 @@
   "description": "A simple nodejs script for performing basic actions in google drive.",
   "main": "bgdrive.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "npm install && npm link"
   },
   "bin": {
-      "bgdrive": "bgdrive.js"
+    "bgdrive": "bgdrive.js"
   },
   "repository": {
     "type": "git",
