@@ -208,6 +208,7 @@ async function exportFile(auth, parameters) {
     const { data } = await drive.files.get({
       fileId,
       fields: "name",
+      supportsAllDrives: true
     });
     const name = data.name;
     const response = await drive.files.get(
@@ -281,6 +282,7 @@ async function createShortcut(auth, fileId, folderId, prefix) {
     {
       resource: shortcutMetadata,
       fields: "id,name,mimeType,shortcutDetails,parents",
+      supportsAllDrives: true
       // parents:  [folderId] , // <-- doesn't work...
     },
     function (err, resp) {
@@ -324,7 +326,7 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
     {
       fileId: fileId,
       fields: "parents",
-      supportsAllDrives: true,
+      supportsAllDrives: true
     },
     function (err, response) {
       if (err) {
@@ -346,7 +348,7 @@ async function moveOneFile(auth, fileId, folderId, makeShortcut) {
             addParents: folderId,
             removeParents: previousParents,
             fields: "id, parents",
-            supportsAllDrives: true,
+            supportsAllDrives: true
           },
           function (err, resp) {
             if (err) {
@@ -477,6 +479,7 @@ async function collectElements(auth, params) {
         fields: "nextPageToken, files(id, name)",
         spaces: "drive",
         pageToken: pageToken,
+        supportsAllDrives: true
       });
 
       Array.prototype.push.apply(files, res.data.files);
@@ -525,6 +528,7 @@ async function uploadFile(auth, file, folderId) {
     const uploadedFile = await drive.files.create({
       requestBody,
       media,
+      supportsAllDrives: true
     });
 
     console.log("File Id:", uploadedFile.data.id);
@@ -547,6 +551,7 @@ async function createFolder(auth, name, folderId) {
     {
       resource: fileMetadata,
       fields: "id",
+      supportsAllDrives: true
     },
     function (err, response) {
       if (err) {
@@ -578,7 +583,7 @@ async function getName(auth, id) {
     console.log(permissions.data);
     const res = await drive.files.get({
       fileId: id,
-      supportsAllDrives: true,
+      supportsAllDrives: true
     });
     // console.log("TEMPORARY="+JSON.stringify(    res        ,null,2))
     return res.data.name;
@@ -620,7 +625,7 @@ async function renameFile(auth, fileId, name) {
     {
       fileId: fileId,
       resource: resource,
-      supportsAllDrives: true,
+      supportsAllDrives: true
     },
     function (err, resp) {
       if (err) {
