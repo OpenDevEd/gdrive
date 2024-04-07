@@ -16,11 +16,11 @@ program.option("-d, --debug", "debug");
 
 program
   .command("download <source...>")
-  // .option(
-  //   "-f, --format [format]",
-  //   "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
-  //   "pdf"
-  // )
+  .option(
+    "-f, --format [format]",
+    "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
+    "-"
+  )
   .description("Download gdrive file(s) in the given format(s).")
   .action((source, options) => {
     source = cleanUp(source);
@@ -113,7 +113,7 @@ program
     "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
   )
   .option("-n, --name [string]", "Specify a string to search for in file names")
-  .description("Retrieve files from Google Drive")
+  .description("Retrieve files from Google Drive (collectElements)")
   .action((options) => {
     // options.target = cleanUp(options.target)
     runFunction(collectElements, { options: options });
@@ -200,40 +200,58 @@ async function copyFile(auth, fileId, folderId, prefix, name) {
 }
 
 async function exportFile(auth, parameters) {
-  // console.log("TEMPORARY="+JSON.stringify(   parameters         ,null,2))
+  console.log("TEMPORARY=" + JSON.stringify(parameters, null, 2));
   var drive = google.drive({ version: "v3", auth: auth });
-  fileIds = parameters?.sources;
-  // types = parameters.options.format.split(",");
-  fileIds.forEach(async (fileId) => {
-    const { data } = await drive.files.get({
-      fileId,
-      fields: "name",
-      supportsAllDrives: true
-    });
-    const name = data.name;
-    const response = await drive.files.get(
-      {
+  let fileIds = parameters?.sources;
+  const formats = parameters.options.format ? parameters.options.format.split(',') : "-";
+  for (fmt of formats) {
+    console.log(`---------- ${fmt}`);
+
+    for (const fileId of fileIds) {
+      const { data } = await drive.files.get({
         fileId,
-        alt: "media",
-      },
-      { responseType: "stream" }
-    );
+        fields: "name, mimeType",
+        supportsAllDrives: true
+      });
+      const name = data.name;
+      let response;
 
-    // Create a write stream to save the file content
-    const dest = fs.createWriteStream(name);
+      const formatMime = fmt == "-" ? getMimetype(defaultFormat(data.mimeType)) : getMimetype(fmt); // Assuming format like 'application/pdf' for Google Docs, for example
+      const extension = fmt == "-" ? defaultFormat(data.mimeType) : fmt;
+      // Check if the file is a Google Workspace document and a format is specified
+      let filename = name;
+      // Thisshoudl be the outermost if... otherwise media is downloaded multiple times...
+      if (data.mimeType.includes('google-apps') && formatMime) {
+        filename = `${name}.${extension}`;
+        response = await drive.files.export({
+          fileId,
+          mimeType: formatMime,
+        }, { responseType: "stream" });
+      } else {
+        // For non-Google Workspace files or when no format conversion is needed
+        response = await drive.files.get(
+          {
+            fileId,
+            alt: "media",
+          },
+          { responseType: "stream" }
+        );
+      }
+      // For media files, we'll have the wrong format?
+      const dest = fs.createWriteStream(filename);
 
-    // Pipe the file content to the write stream
-    response.data.pipe(dest);
+      response.data.pipe(dest);
 
-    // Wait for the download to complete
-    await new Promise((resolve, reject) => {
-      dest.on("finish", resolve);
-      dest.on("error", reject);
-    });
+      await new Promise((resolve, reject) => {
+        dest.on("finish", resolve);
+        dest.on("error", reject);
+      });
 
-    console.log(`File "${name}" downloaded successfully! `);
-  });
+      console.log(`File "${name}.${extension}" downloaded successfully! `);
+    }
+  }
 }
+
 
 async function createWormhole(auth, parameters) {
   files = parameters.sources;
@@ -382,6 +400,43 @@ async function uploadFiles(auth, params) {
     const id = await uploadFile(auth, file, folderId);
   }
 }
+
+function defaultFormat(param) {
+  switch (param) {
+    case 'application/vnd.google-apps.document':
+      return "docx";
+    case 'application/vnd.google-apps.presentation': //	Google Slides
+      return "pptx";
+    case 'application/vnd.google-apps.spreadsheet': //	Google Sheets
+      return "xlsx";
+    default:
+      console.log(`Did not understand type=${param}. Defaulting to pdf`);
+      return "pdf";
+  }
+};
+
+/*
+application/vnd.google-apps.audio	
+application/vnd.google-apps.document	Google Docs
+application/vnd.google-apps.drive-sdk	Third-party shortcut
+application/vnd.google-apps.drawing	Google Drawings
+application/vnd.google-apps.file	Google Drive file
+application/vnd.google-apps.folder	Google Drive folder
+application/vnd.google-apps.form	Google Forms
+application/vnd.google-apps.fusiontable	Google Fusion Tables
+application/vnd.google-apps.jam	Google Jamboard
+application/vnd.google-apps.mail-layout	Email layout
+application/vnd.google-apps.map	Google My Maps
+application/vnd.google-apps.photo	Google Photos
+application/vnd.google-apps.presentation	Google Slides
+application/vnd.google-apps.script	Google Apps Script
+application/vnd.google-apps.shortcut	Shortcut
+application/vnd.google-apps.site	Google Sites
+application/vnd.google-apps.spreadsheet	Google Sheets
+application/vnd.google-apps.unknown	
+application/vnd.google-apps.video
+*/
+
 function getMimetype(file) {
   switch (file) {
     case "pdf":
@@ -488,7 +543,7 @@ async function collectElements(auth, params) {
         const fileExtension = file.name.slice(file.name.lastIndexOf("."));
         let shortenedString = "";
         if (fileExtension.length < 6 && file.name.length > 33)
-          shortenedString =  file.name.slice(0, 30) + '...' + fileExtension;
+          shortenedString = file.name.slice(0, 30) + '...' + fileExtension;
         else if (file.name.length > 33)
           shortenedString = file.name.slice(0, 33) + "...";
         else shortenedString = file.name;
