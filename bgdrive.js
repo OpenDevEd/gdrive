@@ -105,7 +105,7 @@ program
   });
 
 program
-  .command("get")
+  .command("list")
   .option("-f, --folderOnly", "Retrieve only folders")
   .option("-i, --fileOnly", "Retrieve only files")
   .option(
@@ -113,11 +113,24 @@ program
     "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
   )
   .option("-n, --name [string]", "Specify a string to search for in file names")
-  .description("Retrieve files from Google Drive (collectElements)")
+  //.option("-p, --parent [string]", "Specify a parent folder id to search")
+  .description("Retrieve files from Google Drive (drive.files.list)")
   .action((options) => {
-    // options.target = cleanUp(options.target)
+    options.parent = cleanUp(options.parent)
     runFunction(collectElements, { options: options });
   });
+
+program
+  .command("name <id>")
+  .option("-s, --set [string]", "Set the name.")
+  .option("-p, --prefix [string]", "Prefix the name.", "")
+  .option("-a, --append [string]", "Append to the name.", "")
+  .description("Get or set or modify the name.")
+  .action((id, options) => {
+    id = cleanUp(id);
+    runFunction(nameOperation, { id: id, options: options });
+  });
+
 
 program.parse(process.argv);
 const options = program.opts();
@@ -497,7 +510,8 @@ function getMimetype(file) {
 
 async function collectElements(auth, params) {
   let query = "";
-
+  let queryArr = [];
+  console.log("Collecting elements from Google Drive " + JSON.stringify(params));
   if (params.options.format) {
     console.log("FORMAT=" + params.options.format);
     let mimetypes = [];
@@ -507,21 +521,26 @@ async function collectElements(auth, params) {
       mimetypes.push(mimetype);
     });
     if (mimetypes.length != 0) {
-      query = "( ";
+      let qArr = []
       for (const mimetype of mimetypes) {
-        query = query + "mimeType='" + mimetype + "' or ";
+        qArr.push("mimeType='" + mimetype + "'");
       }
       query = query.slice(0, -4);
-      query = query + ") and ";
+      query = "( " + qArr.join("or") + ")";
     }
+    queryArr.push(query);
   }
-
   if (params.options.fileOnly && !params.options.folderOnly)
-    query = query + "mimeType!='application/vnd.google-apps.folder' and ";
+    queryArr.push("(mimeType!='application/vnd.google-apps.folder')");
   else if (!params.options.fileOnly && params.options.folderOnly)
-    query = query + "mimeType='application/vnd.google-apps.folder' and ";
+    queryArr.push("(mimeType='application/vnd.google-apps.folder')");
   if (params.options.name)
-    query = query + "name contains '" + params.options.name + "' and ";
+    queryArr.push("(name contains '" + params.options.name + "')");
+  // Doesn't work:
+  //if (params.options.parent)
+  // queryArr.push("('" + params.options.parent + "' in parents)");    
+  query = queryArr.join(" and ");
+  console.log(query);
   const drive = google.drive({ version: "v3", auth });
   const files = [];
   const data = [];
@@ -530,13 +549,14 @@ async function collectElements(auth, params) {
   do {
     try {
       const res = await drive.files.list({
-        q: query.slice(0, -5),
+        q: query,
         fields: "nextPageToken, files(id, name)",
         spaces: "drive",
         pageToken: pageToken,
         supportsAllDrives: true
       });
 
+      console.log("TEMPORARY=" + JSON.stringify(res, null, 2))
       Array.prototype.push.apply(files, res.data.files);
       res.data.files.forEach(function (file) {
         // console.log('Found file:', file.name, file.id);
@@ -624,6 +644,22 @@ async function createFolder(auth, name, folderId) {
     }
   );
 }
+
+async function nameOperation(auth, options) {
+  console.log(options);
+  if (options.options.set) {
+    console.log("Set the name: " + options.options.set);
+    const res = await renameFile(auth, options.id, options.options.set);
+    console.log(res);
+  } else if (options.options.append || options.options.prefix) {
+    const name = await getName(auth, options.id);
+    const res = await renameFile(auth, options.id, options.options.prefix + name + options.options.append);
+  } else {
+    console.log("Get the name");
+    const name_ = await getName(auth, options.id);
+    console.log("Name: " + name_);
+  }
+};
 
 async function getName(auth, id) {
   var drive = google.drive({ version: "v3", auth: auth });
