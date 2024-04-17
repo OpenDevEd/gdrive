@@ -113,10 +113,13 @@ program
     "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
   )
   .option("-n, --name [string]", "Specify a string to search for in file names")
+  .option("-d, --driveid [string]", "Specify a drive id to search")
   .option("-p, --parent [string]", "Specify a parent folder id to search. This requires that you have generated a tree.json file.")
   .description("Retrieve files from Google Drive (drive.files.list). Note that it's not possible retrive sub-folders of a folder. See option 'tree'.")
   .action((options) => {
     options.parent = cleanUp(options.parent)
+    options.driveid = cleanUp(options.driveid)
+    console.log(options)
     runFunction(collectElements, { options: options });
   });
 
@@ -554,40 +557,61 @@ async function collectElements(auth, params) {
   const drive = google.drive({ version: "v3", auth });
   const files = [];
   const data = [];
+  let jsonData = [];
   let pageToken = null;
   // console.log("q: ", query);
+  //   fields: "nextPageToken, files(id, name, mimeType, description, starred, trashed, parents, webViewLink, iconLink, hasThumbnail, thumbnailLink, createdTime, modifiedTime, size, version, owners, lastModifyingUser, shared, permissions, folderColorRgb, originalFilename, fullFileExtension, fileExtension)",
+  let listParam = {
+    q: query,
+    fields: "nextPageToken, files(id, name, mimeType, starred, trashed, createdTime, modifiedTime, version, parents, fullFileExtension, fileExtension)",
+    spaces: "drive",
+    pageToken: pageToken,
+    supportsAllDrives: true
+  }
+  if (params.options.driveid) {
+    listParam = {
+      ...listParam,
+      corpora: 'drive',
+      driveId: params.options.driveid,
+      includeItemsFromAllDrives: true,
+      orderBy: 'folder,name'
+    }
+  }
+  // console.log(listParam)
   do {
     try {
-      const res = await drive.files.list({
-        q: query,
-        fields: "nextPageToken, files(id, name)",
-        spaces: "drive",
-        pageToken: pageToken,
-        supportsAllDrives: true
-      });
-
+      const res = await drive.files.list(listParam);
       console.log("TEMPORARY=" + JSON.stringify(res, null, 2))
       Array.prototype.push.apply(files, res.data.files);
       res.data.files.forEach(function (file) {
-        // console.log('Found file:', file.name, file.id);
-        const fileExtension = file.name.slice(file.name.lastIndexOf("."));
-        let shortenedString = "";
-        if (fileExtension.length < 6 && file.name.length > 33)
-          shortenedString = file.name.slice(0, 30) + '...' + fileExtension;
-        else if (file.name.length > 33)
-          shortenedString = file.name.slice(0, 33) + "...";
-        else shortenedString = file.name;
-
-        data.push([shortenedString, file.id]);
+        // console.log('Found file:', file.name, file.id);        
+        data.push([shortenFileName(file), file.id]);
+        jsonData.push(file);
       });
-
       pageToken = res.data.nextPageToken;
     } catch (err) {
       // TODO (developer) - Handle error
       throw err;
     }
   } while (pageToken);
+  fs.writeFile('tree.json', JSON.stringify(jsonData, null, 2), (err) => {
+    if (err) throw err;
+    console.log('Data written to file');
+  });
   console.table(data);
+}
+
+
+function shortenFileName(file) {
+  const fileExtension = file.name.slice(file.name.lastIndexOf("."));
+  let shortenedString = "";
+  if (fileExtension.length < 6 && file.name.length > 33)
+    shortenedString = file.name.slice(0, 30) + '...' + fileExtension;
+  else if (file.name.length > 33)
+    shortenedString = file.name.slice(0, 33) + "...";
+  else shortenedString = file.name;
+
+  return shortenedString;
 }
 
 async function uploadFile(auth, file, folderId) {
@@ -741,9 +765,7 @@ async function renameFile(auth, fileId, name) {
 }
 
 async function getTree(auth, options) {
-// https://stackoverflow.com/questions/41741520/how-do-i-search-sub-folders-and-sub-sub-folders-in-google-drive
-  const { google } = require('googleapis')
-  const gOAuth = require('./googleOAuth')
+  // https://stackoverflow.com/questions/41741520/how-do-i-search-sub-folders-and-sub-sub-folders-in-google-drive
 
   // resolve the promises for getting G files and folders
   const getGFilePaths = async () => {
@@ -799,22 +821,22 @@ async function getTree(auth, options) {
     }
   }
 
-  // make call out gDrive to get meta-data files. Code adds all files in a single array which are returned in pages
+  // make call out to gDrive to get meta-data files. Code adds all files in a single array which are returned in pages
   const getGdriveList = async (params) => {
-    const gKeys = await gOAuth.get()
-    const drive = google.drive({ version: 'v3', auth: gKeys })
-    let list = []
-    let nextPgToken
+    const drive = google.drive({ version: 'v3', auth: auth });
+    let list = [];
+    let nextPgToken;
     do {
-      let res = await drive.files.list(params)
-      list.push(...res.data.files)
-      nextPgToken = res.data.nextPageToken
-      params.pageToken = nextPgToken
+      let res = await drive.files.list(params);
+      list.push(...res.data.files);
+      nextPgToken = res.data.nextPageToken;
+      params.pageToken = nextPgToken;
     }
-    while (nextPgToken)
-    return list
+    while (nextPgToken);
+    return list;
   }
 }
+
 
 /**
  * @license
