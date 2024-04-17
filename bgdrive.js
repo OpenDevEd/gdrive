@@ -123,15 +123,16 @@ program
     runFunction(collectElements, { options: options });
   });
 
+/*
 program
-  .command("tree")
-  .option("-d, --drive [id]", "specify the drive")
-  .description("Retrieve tree of folders from Google Drive. This is slow. Output to tree.json")
-  .action((options) => {
-    // options.parent = cleanUp(options.parent)
-    runFunction(getTree, { options: options });
-  });
-
+.command("tree")
+.option("-d, --drive [id]", "specify the drive")
+.description("Retrieve tree of folders from Google Drive. This is slow. Output to tree.json")
+.action((options) => {
+  // options.parent = cleanUp(options.parent)
+  runFunction(getTree, { options: options });
+});
+*/
 
 program
   .command("name <id>")
