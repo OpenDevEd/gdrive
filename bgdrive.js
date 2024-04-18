@@ -9,6 +9,7 @@ const confdir = require("os").homedir() + "/.config/Bgdrive/";
 const TOKEN_PATH = confdir + "token.json";
 
 const { Command } = require("commander");
+
 const program = new Command();
 program.version("0.0.1");
 
@@ -21,15 +22,20 @@ program
     "specify the format: pdf,txt,html,docx,odt,xlsx,ods,csv,tsv,pptx,odp (separate multiple formats with comma)",
     "-"
   )
-  .description("Download gdrive file(s) in the given format(s).")
+  .option(
+    "-r, --range [range]",
+    "For a sheet, you can specify the range. Data will be returned as json.",
+    ""
+  )
+  .description("Download gdrive file(s) in the given format(s). For sheets, if a gid is present, sheets.spreadsheets will be used.")
   .action((source, options) => {
     source = cleanUp(source);
-    runFunction(exportFile, { sources: source, options: options });
+    gid = getgid(source);
+    runFunction(exportFile, { sources: source, gid: gid, options: options });
   });
 
 /*
 New files: Might be easier to just stick with the browser-based ways of doing this?
-
 program
   .command('new')
 */
@@ -64,7 +70,7 @@ program
   .option("-m, --migrate", "prefix [old_Shared_Folder] and [new_Shared_Drive]")
   .description("Create shortcuts for gdrive folders in the folders")
   .action((source, options) => {
-    source = cleanUp(source);
+    source, gid = cleanUp(source, true);
     runFunction(createWormhole, { sources: source, options: options });
   });
 
@@ -114,7 +120,8 @@ program
   )
   .option("-n, --name [string]", "Specify a string to search for in file names")
   .option("-d, --driveid [string]", "Specify a drive id to search")
-  .option("-p, --parent [string]", "Specify a parent folder id to search. This requires that you have generated a tree.json file.")
+  .option("-s, --save [string]", "Save output as json")
+  // .option("-p, --parent [string]", "Specify a parent folder id to search. This requires that you have generated a tree.json file.")
   .description("Retrieve files from Google Drive (drive.files.list). Note that it's not possible retrive sub-folders of a folder. See option 'tree'.")
   .action((options) => {
     options.parent = cleanUp(options.parent)
@@ -163,10 +170,28 @@ function cleanUp(value) {
   return value;
 }
 
+function getgid(value) {
+  if (value === undefined) {
+    // console.log("no need to clean ")
+    return;
+  }
+  if (Array.isArray(value)) {
+    value = value.map((x) => getgidone(x));
+  } else {
+    value = getgidone(value);
+  }
+  return value;
+}
+
+function getgidone(value) {
+  gid = value.replace(/\#gid/, "");
+  return gid;
+};
+
 function cleanUpOne(value) {
   return value
     .replace(/\?.*$/i, "")
-    .replace(/\/edit.*$/i, "")
+    .replace(/\/(edit|view).*$/i, "")
     .replace(/^.*\//, "");
 }
 
@@ -226,55 +251,114 @@ async function copyFile(auth, fileId, folderId, prefix, name) {
   //  moveOneFile(auth, shortcut.id, folderId);
 }
 
+async function driveFilesExport(auth, filename, param) {
+  var drive = google.drive({ version: "v3", auth: auth });
+  response = await drive.files.export(param, { responseType: "stream" });
+  const dest = fs.createWriteStream(filename);
+  response.data.pipe(dest);
+  await new Promise((resolve, reject) => {
+    dest.on("finish", resolve);
+    dest.on("error", reject);
+  });
+}
+
+async function driveFilesGet(auth, filename, param) {
+  var drive = google.drive({ version: "v3", auth: auth });
+  response = await drive.files.get(param,
+    { responseType: "stream" });
+  const dest = fs.createWriteStream(filename);
+  response.data.pipe(dest);
+  await new Promise((resolve, reject) => {
+    dest.on("finish", resolve);
+    dest.on("error", reject);
+  });
+}
+
+
+async function sheetsSpreadsheets(auth, filename, fileId, formatMime, parametersGid, parametersRange, parametersSheetNumber) {
+  console.log("SheetsSpreadsheets")
+  const drive = google.drive('v3');
+  const sheets = google.sheets({ version: 'v4', auth });
+  let range = "";
+  if (parametersRange || parametersSheetNumber || parametersGid) {
+    if (parametersGid) {
+      const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+      const sheetName = sheet.data.sheets[0].properties.title;
+      range = `${sheetName}!A1:Z`;
+    } else if (parametersRange) {
+      range = parametersRange;
+    } else if (parametersSheetNumber) {
+      const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+      const sheetName = sheet.data.sheets[parametersSheetNumber].properties.title;
+      range = `${sheetName}!A1:Z`;
+    };
+    drive.files.export({
+      spreadsheetId: fileId,
+      mimeType: formatMime,
+      ranges: [range]
+    }, { responseType: 'stream' }, (err, response) => {
+      if (err) {
+        console.error('The API returned an error:', err);
+        return;
+      }
+      const dest = fs.createWriteStream(filename);
+      response.data.on('error', err => console.error('Error downloading file:', err));
+      response.data.pipe(dest);
+      console.log('Download Complete!');
+    });
+    let values = response.data.values;
+    // write to json file
+    fs.writeFileSync(filename + ".json", JSON.stringify(values));
+  } else {
+    console.log("error");
+    process.exit(1);
+  }
+}
+
+
 async function exportFile(auth, parameters) {
   console.log("TEMPORARY=" + JSON.stringify(parameters, null, 2));
   var drive = google.drive({ version: "v3", auth: auth });
   let fileIds = parameters?.sources;
   const formats = parameters.options.format ? parameters.options.format.split(',') : "-";
-  for (fmt of formats) {
-    console.log(`---------- ${fmt}`);
-
-    for (const fileId of fileIds) {
-      const { data } = await drive.files.get({
-        fileId,
-        fields: "name, mimeType",
-        supportsAllDrives: true
-      });
-      const name = data.name;
-      let response;
-
-      const formatMime = fmt == "-" ? getMimetype(defaultFormat(data.mimeType)) : getMimetype(fmt); // Assuming format like 'application/pdf' for Google Docs, for example
-      const extension = fmt == "-" ? defaultFormat(data.mimeType) : fmt;
-      // Check if the file is a Google Workspace document and a format is specified
-      let filename = name;
-      // Thisshoudl be the outermost if... otherwise media is downloaded multiple times...
-      if (data.mimeType.includes('google-apps') && formatMime) {
+  for (const fileId of fileIds) {
+    const { data } = await drive.files.get({
+      fileId,
+      fields: "name, mimeType",
+      supportsAllDrives: true
+    });
+    const name = data.name;
+    let response;
+    // Check if the file is a Google Workspace document and a format is specified
+    let filename = name;
+    // Thisshoudl be the outermost if... otherwise media is downloaded multiple times...
+    if (data.mimeType.includes('google-apps')) {
+      console.log(`${data.mimeType}\t${name}`)
+      for (fmt of formats) {
+        const formatMime = fmt == "-" ? getMimetype(defaultFormat(data.mimeType)) : getMimetype(fmt); // Assuming format like 'application/pdf' for Google Docs, for example
+        const extension = fmt == "-" ? defaultFormat(data.mimeType) : fmt;
+        console.log(`---------- ${fmt} -> ${formatMime}`);
         filename = `${name}.${extension}`;
-        response = await drive.files.export({
-          fileId,
-          mimeType: formatMime,
-        }, { responseType: "stream" });
-      } else {
-        // For non-Google Workspace files or when no format conversion is needed
-        response = await drive.files.get(
-          {
+        if (data.mimeType == "application/vnd.google-apps.spreadsheet" && (parameters.gid || parameters.range)) {
+          // TODO: Implement this method also for slides.
+          await sheetsSpreadsheets(auth, filename, fileId, formatMime, parameters.gid, parameters.range, null);
+        } else {
+          console.log("Drive")
+          await driveFilesExport(auth, filename, {
             fileId,
-            alt: "media",
-          },
-          { responseType: "stream" }
-        );
+            mimeType: formatMime,
+          });
+        };
+        console.log(`File "${name}.${extension}" downloaded successfully! `);
       }
-      // For media files, we'll have the wrong format?
-      const dest = fs.createWriteStream(filename);
-
-      response.data.pipe(dest);
-
-      await new Promise((resolve, reject) => {
-        dest.on("finish", resolve);
-        dest.on("error", reject);
+    } else {
+      // For non-Google Workspace files or when no format conversion is needed
+      await driveFilesGet(auth, filename, {
+        fileId,
+        alt: "media",
       });
-
-      console.log(`File "${name}.${extension}" downloaded successfully! `);
+      console.log(`Media file "${name}" downloaded successfully! `);
+      // For media files, we'll have the wrong format?
     }
   }
 }
@@ -473,19 +557,22 @@ function getMimetype(file) {
       return "text/html";
     case "txt":
       return "text/plain";
-    case "docx":
     case "doc":
+    case "docx":
       return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     case "odt":
       return "application/vnd.oasis.opendocument.text";
     case "xls":
     case "xlsx":
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     case "ods":
-      return "application/vnd.ms-excel";
+      return "application/vnd.oasis.opendocument.spreadsheet";
     case "xml":
-      return "text/xml";
+      return "application/xml";
     case "csv":
-      return "text/plain";
+      return "text/csv";
+    case "tsv":
+      return 'text/tab-separated-values';
     case "tmpl":
       return "text/plain";
     case "php":
@@ -498,10 +585,8 @@ function getMimetype(file) {
       return "image/gif";
     case "bmp":
       return "image/bmp";
-    case "doc":
-      return "application/msword";
     case "js":
-      return "text/js";
+      return "application/javascript";
     case "swf":
       return "application/x-shockwave-flash";
     case "mp3":
@@ -509,13 +594,13 @@ function getMimetype(file) {
     case "zip":
       return "application/zip";
     case "rar":
-      return "application/rar";
+      return "application/x-rar-compressed";
     case "tar":
-      return "application/tar";
+      return "application/x-tar";
     case "arj":
-      return "application/arj";
+      return "application/x-arj";
     case "cab":
-      return "application/cab";
+      return "application/vnd.ms-cab-compressed";
     default:
       console.log(`Did not understand type=${file}`);
       return null;
@@ -595,10 +680,12 @@ async function collectElements(auth, params) {
       throw err;
     }
   } while (pageToken);
-  fs.writeFile('tree.json', JSON.stringify(jsonData, null, 2), (err) => {
-    if (err) throw err;
-    console.log('Data written to file');
-  });
+  if (params.options.save) {
+    fs.writeFile(params.options.save, JSON.stringify(jsonData, null, 2), (err) => {
+      if (err) throw err;
+      console.log('Data written to file: ' + params.options.save);
+    });
+  };
   console.table(data);
 }
 
