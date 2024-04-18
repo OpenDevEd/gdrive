@@ -285,30 +285,43 @@ async function sheetsSpreadsheets(auth, filename, fileId, formatMime, parameters
       const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
       const sheetName = sheet.data.sheets[0].properties.title;
       range = `${sheetName}!A1:Z`;
+      console.log(`${filename}\n${fileId}\n${formatMime}\n${range}`);
+      sheets.export({
+        spreadsheetId: fileId,
+        mimeType: formatMime,
+        ranges: [range] // Uncomment this line to specify the range
+      }, { responseType: 'stream' }, (err, response) => {
+        if (err) {
+          console.error('The API returned an error:', err);
+          return;
+        }
+        const dest = fs.createWriteStream(filename);
+        response.data.on('error', err => console.error('Error downloading file:', err));
+        response.data.pipe(dest);
+        console.log('Download Complete!');
+      });
+      let values = response.data.values;
+      // write to json file
+      fs.writeFileSync(filename + ".json", JSON.stringify(values));
     } else if (parametersRange) {
       range = parametersRange;
     } else if (parametersSheetNumber) {
       const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
-      const sheetName = sheet.data.sheets[parametersSheetNumber].properties.title;
-      range = `${sheetName}!A1:Z`;
+      const sheetX = sheet.data.sheets[parametersSheetNumber];
+      // Get the values in the sheet
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: fileId,
+        range: sheetX.properties.title, // use the title of the sheet as the range
+      });
+      // Convert the values to TSV
+      const tsv = response.data.values.map(row => row.join('\t')).join('\n');
+      // Write the TSV to a file
+      fs.writeFile('output.tsv', tsv, (err) => {
+        if (err) throw err;
+        console.log('The file has been saved!');
+      });
+      // range = `${sheetName}!A1:Z`;
     };
-    drive.files.export({
-      spreadsheetId: fileId,
-      mimeType: formatMime,
-      ranges: [range]
-    }, { responseType: 'stream' }, (err, response) => {
-      if (err) {
-        console.error('The API returned an error:', err);
-        return;
-      }
-      const dest = fs.createWriteStream(filename);
-      response.data.on('error', err => console.error('Error downloading file:', err));
-      response.data.pipe(dest);
-      console.log('Download Complete!');
-    });
-    let values = response.data.values;
-    // write to json file
-    fs.writeFileSync(filename + ".json", JSON.stringify(values));
   } else {
     console.log("error");
     process.exit(1);
