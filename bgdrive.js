@@ -16,6 +16,41 @@ program.version("0.0.1");
 program.option("-d, --debug", "debug");
 
 program
+  .command("sheet <source...>")
+  .option(
+    "-r, --range [range]",
+    "For a sheet, you can specify the range. Data will be returned as json.",
+    ""
+  )
+  .option(
+    "-s, --set [string]",
+    "set the values to a json string",
+    ""
+  )
+  .option(
+    "-o, --setone [string]",
+    "set one value",
+    ""
+  )
+  .option(
+    "-f, --file [string]",
+    "set the values to a json string from a file",
+    ""
+  )
+  .option(
+    "-g, --getone",
+    "get one value",
+    ""
+  )
+  .description("Read and set values in a sheet.")
+  .action((source, options) => {
+    source = cleanUp(source);
+    gid = getgid(source);
+    runFunction(handleSheet, { sources: source, gid: gid, options: options });
+  });
+
+
+program
   .command("download <source...>")
   .option(
     "-f, --format [format]",
@@ -276,35 +311,24 @@ async function driveFilesGet(auth, filename, param) {
 
 
 async function sheetsSpreadsheets(auth, filename, fileId, formatMime, parametersGid, parametersRange, parametersSheetNumber) {
-  console.log("SheetsSpreadsheets")
+  // console.log("SheetsSpreadsheets")
   const drive = google.drive('v3');
   const sheets = google.sheets({ version: 'v4', auth });
-  let range = "";
+  //let range = "";
   if (parametersRange || parametersSheetNumber || parametersGid) {
     if (parametersGid) {
-      const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
-      const sheetName = sheet.data.sheets[0].properties.title;
-      range = `${sheetName}!A1:Z`;
-      console.log(`${filename}\n${fileId}\n${formatMime}\n${range}`);
-      sheets.export({
-        spreadsheetId: fileId,
-        mimeType: formatMime,
-        ranges: [range] // Uncomment this line to specify the range
-      }, { responseType: 'stream' }, (err, response) => {
-        if (err) {
-          console.error('The API returned an error:', err);
-          return;
-        }
-        const dest = fs.createWriteStream(filename);
-        response.data.on('error', err => console.error('Error downloading file:', err));
-        response.data.pipe(dest);
-        console.log('Download Complete!');
-      });
-      let values = response.data.values;
-      // write to json file
-      fs.writeFileSync(filename + ".json", JSON.stringify(values));
     } else if (parametersRange) {
-      range = parametersRange;
+      console.log("SheetsSpreadsheets - range")
+      const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+      // const sheetName = sheet.data.sheets[0].properties.title;
+      // range = `${sheetName}!A1:Z`;
+      console.log(`${filename}\n${fileId}\n${formatMime}\n${range}`);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: fileId,
+        ranges: range
+      });
+      fs.writeFileSync(filename + ".json", JSON.stringify(response.data.values));
+      // range = parametersRange;
     } else if (parametersSheetNumber) {
       const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
       const sheetX = sheet.data.sheets[parametersSheetNumber];
@@ -328,6 +352,56 @@ async function sheetsSpreadsheets(auth, filename, fileId, formatMime, parameters
   }
 }
 
+async function handleSheet(auth, parameters) {
+  console.log("TEMPORARY=" + JSON.stringify(parameters, null, 2));
+  const sheets = google.sheets({ version: 'v4', auth });
+  for (fileId of parameters.sources) {
+    console.log("SheetsSpreadsheets - range")
+    const sheet = await sheets.spreadsheets.get({ spreadsheetId: fileId });
+    filename = sheet.data.properties.title;
+    const range = parameters.options.range.replace(/~/g, "!");
+    if (!range) {
+      console.error('Range is not defined');
+      continue;
+    }
+    console.log(`${filename}\n${fileId}\n${range}`);
+    if (parameters.options.set || parameters.options.setone || parameters.options.file) {
+      // Set the values in the sheet to parameters.options.set
+      let value;
+      if (parameters.options.file) {
+        // read the file and set the values in the sheet to the contents of the file
+        const data = fs.readFileSync(parameters.options.file, 'utf8');
+        value = JSON.parse(data);
+      } else if (parameters.options.setone) {
+        value = [[parameters.options.setone]];
+      } else {
+        value = JSON.parse(parameters.options.set);
+      };
+      const response = await sheets.spreadsheets.values.update({
+        spreadsheetId: fileId,
+        range: range,
+        valueInputOption: 'USER_ENTERED', // or 'RAW'
+        resource: {
+          values: value // this should be an array of arrays representing the cell values to update
+        }
+      });
+    } else {
+      if (parameters.options.getone) {
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: fileId,
+          range: range
+        });
+        console.log(response.data.values[0][0]);
+      } else {
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: fileId,
+          range: range
+        });
+        fs.writeFileSync(filename + ".json", JSON.stringify(response.data.values));
+      }
+    }
+  }
+}
 
 async function exportFile(auth, parameters) {
   console.log("TEMPORARY=" + JSON.stringify(parameters, null, 2));
