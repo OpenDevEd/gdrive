@@ -42,6 +42,11 @@ program
     "get one value",
     ""
   )
+  .option(
+    "-l, --log [string]",
+    "log the result to file",
+    ""
+  )
   .description("Read and set values in a sheet.")
   .action((source, options) => {
     source = cleanUp(source);
@@ -385,6 +390,11 @@ async function handleSheet(auth, parameters) {
           values: value // this should be an array of arrays representing the cell values to update
         }
       });
+      if (parameters.options.log) {
+        console.log(response.data);
+        console.log(`write response.data to ${parameters.options.log}`);
+        fs.writeFileSync(parameters.options.log, JSON.stringify(response.data, null, 2));
+      };
     } else {
       if (parameters.options.getone) {
         const response = await sheets.spreadsheets.values.get({
