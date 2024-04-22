@@ -92,6 +92,7 @@ You're now ready to use `bgdrive`!
 - `upload [options] <path...>`: Uploads files to gdrive.
 - `get [options]`: Retrieves files from Google Drive.
 - `help [command]`: Displays help for the specified command.
+- `sheet [options]`: Retrieve and set cells/ranges within Google Sheets
 
 # See also
 
