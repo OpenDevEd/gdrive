@@ -93,7 +93,8 @@ You're now ready to use `bgdrive`!
 - `get [options]`: Retrieves files from Google Drive.
 - `help [command]`: Displays help for the specified command.
 - `sheet [options]`: Retrieve and set cells/ranges within Google Sheets
-
+- `replicate [options]`: Replicate a folder structure
+  
 # See also
 
 https://github.com/odeke-em/drive
