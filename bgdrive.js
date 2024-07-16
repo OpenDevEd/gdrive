@@ -133,6 +133,26 @@ program
   });
 
 program
+  .command("replicate")
+  .option("-t, --target [id]", "specify the target folder")
+  .option(
+    "-s, --source [id]",
+    "Specify the source folder"
+  )
+  .option(
+    "-S, --shortcuts",
+    "Create shortcuts in source, so that people can easily drop files."
+  )
+  .description("Replicate a folder structure starting with folder source to the folder target.")
+  .action((source, options) => {
+    source = cleanUp(options.source);
+    target = cleanUp(options.target);
+    shortcuts = options.shortcuts || false;
+    runFunction(replicateStructure, { source: source, target: target, shortcuts: shortcuts });
+  });
+
+
+program
   .command("newfolder <name...>")
   .option("-t, --target [id]", "specify the target folder")
   .description("Create folders on gdrive.")
@@ -390,6 +410,7 @@ async function handleSheet(auth, parameters) {
           values: value // this should be an array of arrays representing the cell values to update
         }
       });
+
       if (parameters.options.log) {
         console.log(response.data);
         console.log(`write response.data to ${parameters.options.log}`);
@@ -542,6 +563,78 @@ async function moveFiles(auth, parameters) {
   files.forEach(async (fileId) => {
     moveOneFile(auth, fileId, folderId, makeShortCut);
   });
+}
+
+async function getFolderStructure(drive, folderId) {
+  let folderStructure = {};
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: 'files(id, name)',
+  });
+  const folders = res.data.files;
+
+  for (const folder of folders) {
+    folderStructure[folder.id] = {
+      name: folder.name,
+      subfolders: await getFolderStructure(drive, folder.id),
+    };
+  }
+
+  return folderStructure;
+}
+
+async function createFoldersInDestination(drive, destinationFolderId, folderStructure, sourceFolderId, shortcuts) {
+  for (const folderId in folderStructure) {
+    const folderInfo = folderStructure[folderId];
+
+    // Create the folder in the destination
+    const res = await drive.files.create({
+      resource: {
+        name: folderInfo.name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [destinationFolderId],
+      },
+      fields: 'id',
+    });
+
+    const createdFolderId = res.data.id;
+
+    if (shortcuts) {
+      // Create a shortcut in the source folder pointing to the new folder
+      await createShortcut(drive, sourceFolderId, createdFolderId, folderInfo.name);
+    }
+
+    // Recursively create subfolders
+    await createFoldersInDestination(drive, createdFolderId, folderInfo.subfolders, folderId, shortcuts);
+  }
+}
+async function createShortcut(drive, sourceFolderId, targetFolderId, name) {
+  await drive.files.create({
+    resource: {
+      name: `${name} (Shortcut)`,
+      mimeType: 'application/vnd.google-apps.shortcut',
+      parents: [sourceFolderId],
+      shortcutDetails: {
+        targetId: targetFolderId,
+        targetMimeType: 'application/vnd.google-apps.folder',
+      },
+    },
+    fields: 'id',
+  });
+}
+
+async function replicateStructure(auth, parameters) {
+  sourceFolderId = parameters.source;
+  destinationFolderId = parameters.target;
+  shortcuts = parameters.shotcuts;
+  const drive = google.drive({ version: 'v3', auth });
+  const folderStructure = await getFolderStructure(drive, sourceFolderId);
+
+  // Step 2: Create the folder structure in the destination with shortcuts
+  await createFoldersInDestination(drive, destinationFolderId, folderStructure, sourceFolderId, shortcuts);
+
+  console.log('Folder structure replicated and shortcuts created successfully.');
+
 }
 
 async function moveOneFile(auth, fileId, folderId, makeShortcut) {
