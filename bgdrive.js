@@ -598,6 +598,23 @@ async function createShortcut(auth, fileId, folderId, prefix) {
   );
 }
 
+
+async function createShortcutX(drive, sourceFolderId, targetFolderId, name) {
+  await drive.files.create({
+    resource: {
+      name: `${name}`,
+      mimeType: 'application/vnd.google-apps.shortcut',
+      parents: [sourceFolderId],
+      shortcutDetails: {
+        targetId: targetFolderId,
+        targetMimeType: 'application/vnd.google-apps.folder',
+      },
+    },
+    fields: 'id',
+    supportsAllDrives: true
+  });
+}
+
 async function moveFiles(auth, parameters) {
   // runFunction(moveFiles, { sources: source, options: options} );
   files = parameters.sources;
@@ -664,14 +681,14 @@ async function createFoldersInDestination(drive, result_in, destinationFolderId,
       // Create a shortcut in the source folder pointing to the new folder
       if (nextto) {
         // This creates the shortcut next to the original folder:
-        const r = await createShortcut(drive, sourceFolderId, createdFolderId, folderInfo.name);
+        const r = await createShortcutX(drive, sourceFolderId, createdFolderId, folderInfo.name);
         element = {
           ...element,
           "shortcut": r
         };
       } else {
         // This creates the shortcut within the original folder:
-        const r = await createShortcut(drive, folderId, createdFolderId, String(folderInfo.name) + String(addstring));
+        const r = await createShortcutX(drive, folderId, createdFolderId, String(folderInfo.name) + String(addstring));
         element = {
           ...element,
           "shortcut": r
@@ -691,21 +708,6 @@ async function createFoldersInDestination(drive, result_in, destinationFolderId,
   return result;
 }
 
-async function createShortcut(drive, sourceFolderId, targetFolderId, name) {
-  await drive.files.create({
-    resource: {
-      name: `${name}`,
-      mimeType: 'application/vnd.google-apps.shortcut',
-      parents: [sourceFolderId],
-      shortcutDetails: {
-        targetId: targetFolderId,
-        targetMimeType: 'application/vnd.google-apps.folder',
-      },
-    },
-    fields: 'id',
-    supportsAllDrives: true
-  });
-}
 
 async function replicateStructure(auth, parameters) {
   sourceFolderId = parameters.source;
