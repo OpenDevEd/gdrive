@@ -134,21 +134,42 @@ program
 
 program
   .command("replicate")
-  .option("-t, --target [id]", "specify the target folder")
+  .option(
+    "-t, --target [id]",
+    "specify the target folder")
   .option(
     "-s, --source [id]",
     "Specify the source folder"
   )
   .option(
     "-S, --shortcuts",
-    "Create shortcuts in source, so that people can easily drop files."
+    "Create shortcuts in source, so that people can easily drop files.",
+    false
+  )
+  .option(
+    "-x, --nextto",
+    "Create shortcuts next to the source folder. Otherwise the shortcut is placed within the folder. Requires -S.",
+    false
+  )
+  .option(
+    "-n, --name [string]",
+    "Add the string provided to the shortcuts. Take care to include a leading space if you want it. Requires -S.",
+    " (shortcut)"
   )
   .description("Replicate a folder structure starting with folder source to the folder target.")
   .action((options) => {
     source = cleanUp(options.source);
     target = cleanUp(options.target);
     shortcuts = options.shortcuts || false;
-    runFunction(replicateStructure, { source: source, target: target, shortcuts: shortcuts });
+    nextto = options.nextto;
+    addstring = options.name;
+    runFunction(replicateStructure, {
+      source: source,
+      target: target,
+      shortcuts: shortcuts,
+      nextto: nextto,
+      addstring: addstring
+    });
   });
 
 
@@ -575,6 +596,7 @@ async function getFolderStructure(drive, folderId) {
   const folders = res.data.files;
 
   for (const folder of folders) {
+    console.log(`Getting folder structure for: ${folder.name}`);
     folderStructure[folder.id] = {
       name: folder.name,
       subfolders: await getFolderStructure(drive, folder.id),
@@ -584,9 +606,14 @@ async function getFolderStructure(drive, folderId) {
   return folderStructure;
 }
 
-async function createFoldersInDestination(drive, destinationFolderId, folderStructure, sourceFolderId, shortcuts) {
+async function createFoldersInDestination(drive, result_in, destinationFolderId, folderStructure, sourceFolderId, shortcuts, nextto, addstring) {
+  let result = result_in;
   for (const folderId in folderStructure) {
     const folderInfo = folderStructure[folderId];
+    let element = {
+      "folderId": folderId,
+      "folderInfo": folderInfo
+    };
 
     // Create the folder in the destination
     const res = await drive.files.create({
@@ -601,19 +628,48 @@ async function createFoldersInDestination(drive, destinationFolderId, folderStru
 
     const createdFolderId = res.data.id;
 
+    element = {
+      ...element, 
+      "createdFolderId": createdFolderId,
+      "createdFolderName": folderInfo.name,
+      "destinationFolderId": destinationFolderId
+    }
+    
     if (shortcuts) {
       // Create a shortcut in the source folder pointing to the new folder
-      await createShortcut(drive, sourceFolderId, createdFolderId, folderInfo.name);
+      if (nextto) {
+        // This creates the shortcut next to the original folder:
+        const r = await createShortcut(drive, sourceFolderId, createdFolderId, folderInfo.name);
+        element = {
+          ...element,
+          "shortcut": r
+        };
+      } else {
+        // This creates the shortcut within the original folder:
+        const r = await createShortcut(drive, folderId, createdFolderId, String(folderInfo.name) + String(addstring));
+        element = {
+          ...element,
+          "shortcut": r
+        };
+      }
     }
 
     // Recursively create subfolders
-    await createFoldersInDestination(drive, createdFolderId, folderInfo.subfolders, folderId, shortcuts);
+    const r = await createFoldersInDestination(drive, result, createdFolderId, folderInfo.subfolders, folderId, shortcuts, nextto, addstring);
+    element = {
+      ...element,
+      "createFoldersInDestination": r
+    };
+    result.push(element);
   }
+  // TODO: We need to return something sensibile here.
+  return result;
 }
+
 async function createShortcut(drive, sourceFolderId, targetFolderId, name) {
   await drive.files.create({
     resource: {
-      name: `${name} (Shortcut)`,
+      name: `${name}`,
       mimeType: 'application/vnd.google-apps.shortcut',
       parents: [sourceFolderId],
       shortcutDetails: {
@@ -630,14 +686,20 @@ async function replicateStructure(auth, parameters) {
   sourceFolderId = parameters.source;
   destinationFolderId = parameters.target;
   shortcuts = parameters.shortcuts;
+  nextto = parameters.nextto;
+  addstring = parameters.addstring;
   const drive = google.drive({ version: 'v3', auth });
+  console.log('Replicating folder structure...');
+  console.log('Getting folder structure...');
   const folderStructure = await getFolderStructure(drive, sourceFolderId);
-
-  // Step 2: Create the folder structure in the destination with shortcuts
-  await createFoldersInDestination(drive, destinationFolderId, folderStructure, sourceFolderId, shortcuts);
-
+  console.log('Creating folders in destination...');
+  const result = await createFoldersInDestination(drive, [], destinationFolderId, folderStructure, sourceFolderId, shortcuts, nextto, addstring);
   console.log('Folder structure replicated and shortcuts created successfully.');
-
+  return {
+    "parameters": parameters,
+    "folderStructure": folderStructure,
+    "createFoldersInDestination": result
+  };
 }
 
 async function moveOneFile(auth, fileId, folderId, makeShortcut) {
