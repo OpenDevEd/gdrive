@@ -144,7 +144,7 @@ program
     "Create shortcuts in source, so that people can easily drop files."
   )
   .description("Replicate a folder structure starting with folder source to the folder target.")
-  .action((source, options) => {
+  .action((options) => {
     source = cleanUp(options.source);
     target = cleanUp(options.target);
     shortcuts = options.shortcuts || false;
@@ -570,6 +570,7 @@ async function getFolderStructure(drive, folderId) {
   const res = await drive.files.list({
     q: `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: 'files(id, name)',
+    supportsAllDrives: true
   });
   const folders = res.data.files;
 
@@ -592,9 +593,10 @@ async function createFoldersInDestination(drive, destinationFolderId, folderStru
       resource: {
         name: folderInfo.name,
         mimeType: 'application/vnd.google-apps.folder',
-        parents: [destinationFolderId],
+        parents: [destinationFolderId]
       },
       fields: 'id',
+      supportsAllDrives: true
     });
 
     const createdFolderId = res.data.id;
@@ -620,13 +622,14 @@ async function createShortcut(drive, sourceFolderId, targetFolderId, name) {
       },
     },
     fields: 'id',
+    supportsAllDrives: true
   });
 }
 
 async function replicateStructure(auth, parameters) {
   sourceFolderId = parameters.source;
   destinationFolderId = parameters.target;
-  shortcuts = parameters.shotcuts;
+  shortcuts = parameters.shortcuts;
   const drive = google.drive({ version: 'v3', auth });
   const folderStructure = await getFolderStructure(drive, sourceFolderId);
 
