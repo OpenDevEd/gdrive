@@ -174,6 +174,22 @@ program
 
 
 program
+  .command("users <source...>")
+  .description("List users and permissions")
+  .option(
+    "-e, --emails",
+    "List email addresses only.",
+    false
+  )
+  .action((source, options) => {
+    source = ensureArray(cleanUp(source));
+    runFunction(listUsersWithAccessToFolder, {
+      "folderIds": source,
+      "options": options
+    }); 
+  });
+
+program
   .command("newfolder <name...>")
   .option("-t, --target [id]", "specify the target folder")
   .description("Create folders on gdrive.")
@@ -237,6 +253,15 @@ program
 program.parse(process.argv);
 const options = program.opts();
 if (options.debug) console.log(options);
+
+function ensureArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  } else {
+    return [value];
+  }
+
+}
 
 function cleanUp(value) {
   if (value === undefined) {
@@ -701,6 +726,44 @@ async function replicateStructure(auth, parameters) {
     "createFoldersInDestination": result
   };
 }
+
+async function listUsersWithAccessToFolder(auth, params) {
+  const folderIds = params.folderIds;
+  const options = params.options;
+  for (folderId of folderIds) {
+    try {
+      // Initialize Google Drive API client
+      const drive = google.drive({ version: 'v3', auth });
+
+      // Get the permissions for the folder
+      const res = await drive.permissions.list({
+        fileId: folderId,
+        fields: 'permissions(id,emailAddress,type,role)',
+        supportsAllDrives: true
+      });
+
+      // Extract user details from the permissions
+      const users = res.data.permissions
+        .filter(permission => permission.type === 'user')
+        .map(permission => ({
+          id: permission.id,
+          email: permission.emailAddress,
+          role: permission.role,
+        }));
+
+      if (options.emails) {
+        console.log(users.map(user => user.email).join(', '));
+      } else {
+        console.log('Users with access:', users);
+      };
+      return users;
+    } catch (error) {
+      console.error('Error listing users with access:', error);
+      throw error;
+    }
+  }
+}
+
 
 async function moveOneFile(auth, fileId, folderId, makeShortcut) {
   // https://developers.google.com/drive/api/v3/reference/files/get
